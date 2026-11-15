@@ -33,6 +33,7 @@ from serial.tools import list_ports
 # Matches every "Joint <name>: <int>" pair in a line (bytes, no decoding needed)
 JOINT_RE = re.compile(rb"Joint\s+(\w+):\s*(-?\d+)")
 REQUIRED = (b"A", b"D", b"F")
+DEG_PER_COUNT = 360 / 4095  # sensor outputs 0-4095
 
 
 def parse_args():
@@ -86,7 +87,10 @@ def serial_reader(ser, out_q, stop_event):
         for line in lines:
             joints = dict(JOINT_RE.findall(line))
             if all(name in joints for name in REQUIRED):
-                batch.append((now, int(joints[b"A"]), int(joints[b"D"]), int(joints[b"F"])))
+                batch.append((now,
+                              int(joints[b"A"]) * DEG_PER_COUNT,
+                              int(joints[b"D"]) * DEG_PER_COUNT,
+                              int(joints[b"F"]) * DEG_PER_COUNT))
         if batch:
             out_q.put(batch)
 
@@ -107,7 +111,7 @@ def main():
 
     # ---------------- GUI setup ----------------
     app = pg.mkQApp("ESP32 Joint Plotter")
-    pg.setConfigOptions(antialias=False)  # antialiasing is a large render cost
+    pg.setConfigOptions(antialias=True)  # antialiasing is a large render cost
 
     win = pg.GraphicsLayoutWidget(title=f"ESP32 Joints - {port} @ {args.baud}")
     win.resize(1000, 700)
@@ -117,10 +121,10 @@ def main():
     plot_f = win.addPlot(row=1, col=0, title="Joint F vs Joint A")
     plot_f.setXLink(plot_d)  # both plots share the Joint A axis
 
-    for plot, name in ((plot_d, "Joint D"), (plot_f, "Joint F")):
+    for plot, name in ((plot_d, "Joint D [degrees]"), (plot_f, "Joint F [degrees]")):
         plot.showGrid(x=True, y=True, alpha=0.3)
         plot.setLabel("left", name)
-        plot.setLabel("bottom", "Joint A")
+        plot.setLabel("bottom", "Joint A [degrees]")
         # Note: no clip-to-view or downsampling here; both assume x is sorted,
         # which isn't true when x is a joint that moves back and forth.
 
@@ -167,10 +171,11 @@ def main():
         dot_f.setData([a], [f])
         plot_d.setTitle(f"Joint D vs Joint A    (A: {a}, D: {d})")
         plot_f.setTitle(f"Joint F vs Joint A    (A: {a}, F: {f})")
-
+        with open("data.txt", "a") as file:
+            file.write(f"A: {a}, D: {d}, F: {f}\n")
     timer = QtCore.QTimer()
     timer.timeout.connect(update)
-    timer.start(16)  # ~60 fps redraw
+    timer.start(8)
 
     try:
         pg.exec()
