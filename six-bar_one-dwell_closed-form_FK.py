@@ -96,12 +96,12 @@ if __name__ == "__main__":
     fig, ax = plt.subplots(1, 2, figsize=(11, 4))
     ax[0].plot(PS[:, 0], PS[:, 1])
     ax[0].set_aspect("equal")
-    ax[0].set_title("Output path of P")
+    ax[0].set_title("Output path of P Relative to Origin a D")
     ax[0].set_xlabel("x")
     ax[0].set_ylabel("y")
-    for i, name in enumerate(["θ3", "θ4", "θ5", "θ6"]):
+    for i, name in enumerate(["θBC", "θCD", "θMN", "θNF"]):
         ax[1].plot(np.degrees(th2s), np.degrees(QP[:, i]), label=name)
-    ax[1].set_xlabel("θ2 (deg)")
+    ax[1].set_xlabel("θAB (deg)")
     ax[1].set_ylabel("angle (deg)")
     ax[1].set_title("Passive joints vs input")
     ax[1].legend()
