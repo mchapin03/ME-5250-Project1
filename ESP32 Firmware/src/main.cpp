@@ -6,7 +6,7 @@
 #define stepPin 4
 #define dirPin  5
 #define changeDirPin 6
-#define RPM 30
+#define RPM 15
 #define SPR 200
 #define uStep 8
 #define MultiplexerAddress 0x70
@@ -19,13 +19,10 @@
 bool sendUpdate = true;
 long joint_A_prev;
 long joint_A_angle;
-long joint_A_offset;
 long joint_D_prev;
 long joint_D_angle;
-long joint_D_offset;
 long joint_F_prev;
 long joint_F_angle;
-long joint_F_offset;
 static int speed = RPM * ((SPR * uStep)/60);
 static int accel = speed;
 hw_timer_t *timer = nullptr;
@@ -77,13 +74,18 @@ void phaseUnwrap(const long current, long* previous, long* position) {
         delta += 4096;
     }
 
-    *position += delta;
+    *position -= delta;
     *previous = current;
 }
-
+void changeMotorDirection() {
+    if (digitalRead(changeDirPin) == HIGH) {
+        CW();
+    } else {
+        CCW();
+    }
+}
 void setup() {
     Serial.begin(500000);
-
     //200hz timer
     timer = timerBegin(0, 80, true);
     timerAttachInterrupt(timer, &onTimer, false);
@@ -101,10 +103,8 @@ void setup() {
     pinMode(changeDirPin, INPUT);
     digitalPinToInterrupt(changeDirPin);
     attachInterrupt(changeDirPin, switchFlip, CHANGE);
-
     //I2C setup
     Wire.begin(SDA_0, SCL_0, 400000);
-
     for (uint8_t ch = 0; ch < 8; ch++) {
         if (!selectMuxChannel(ch)) { Serial.println("mux not responding"); break; }
         Serial.printf("ch %u:", ch);
@@ -114,24 +114,20 @@ void setup() {
         }
         Serial.println();
     }
-
 }
 
 void loop() {
     //stupid software debounce
     if (changeDir && millis()%3==0) {
         changeDir = false;
-        if (digitalRead(changeDirPin) == HIGH) {
-            CW();
-        } else {
-            CCW();
-        }
+        changeMotorDirection();
     }
 
     char str[128];
     //i know i can optimize this code but i dont care to for this purpose
     if (initalizePosition) {
         initalizePosition = false;
+        changeMotorDirection();
         joint_A_prev = readRawAngle(2);
         joint_A_angle = 0;
         joint_D_prev = readRawAngle(1);
@@ -150,5 +146,3 @@ void loop() {
         Serial.println(str);
     }
 }
-
-
