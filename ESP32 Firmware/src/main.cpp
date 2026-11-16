@@ -6,7 +6,7 @@
 #define stepPin 4
 #define dirPin  5
 #define changeDirPin 6
-#define RPM 30
+#define RPM 15
 #define SPR 200
 #define uStep 8
 #define MultiplexerAddress 0x70
@@ -77,7 +77,7 @@ void phaseUnwrap(const long current, long* previous, long* position) {
         delta += 4096;
     }
 
-    *position += delta;
+    *position -= delta;
     *previous = current;
 }
 
