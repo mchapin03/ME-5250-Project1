@@ -150,5 +150,3 @@ void loop() {
         Serial.println(str);
     }
 }
-
-
