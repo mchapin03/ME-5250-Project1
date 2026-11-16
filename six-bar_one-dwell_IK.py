@@ -93,60 +93,64 @@ def ik_from_P(P): #IK from an output point: convert P to th6, then solve
 
 #Main
 if __name__ == "__main__":
+    #The solver works in th6 internally; only inputs, prints and plots use th_FN.
+    to_FN = lambda t6_deg: t6_deg + 180 #th6 (deg) -> th_FN (deg); exact for this mechanism's range
+    to_th6 = lambda fn_deg: fn_deg - 180 #th_FN (deg) -> th6 (deg)
+ 
     #output range over the full crank rotation (from FK)
     th2s = np.radians(np.arange(0, 360, 0.1)) #build input vector
     th6s = np.array([fk(t)[0][3] for t in th2s]) #find output vector - targets outside this have no solution
-    lo, hi = th6s.min(), th6s.max() #find max/min
-    print(f"Reachable output range: th6 in [{np.degrees(lo):.2f}, {np.degrees(hi):.2f}] deg\n") #show reachable output range
-
+    lo, hi = th6s.min(), th6s.max() #find max/min (th6, rad)
+    lo_deg, hi_deg = to_FN(np.degrees(lo)), to_FN(np.degrees(hi)) #reachable range as th_FN in degrees
+    print(f"Reachable output range: th_FN in [{lo_deg:.2f}, {hi_deg:.2f}] deg\n") #show reachable output range
+ 
     #ask the user for a target output angle within the reachable range
-    lo_deg, hi_deg = np.degrees(lo), np.degrees(hi) #print valid range in degrees
     while True: #keep asking until the input is valid
         try:
-            th6_deg = float(input(f"Enter target output angle th6 ({lo_deg:.2f} to {hi_deg:.2f} deg): "))
-            if lo_deg - 0.005 <= th6_deg <= hi_deg + 0.005: #allow for the rounding in the printed range
+            fn_deg = float(input(f"Enter target output angle th_FN ({lo_deg:.2f} to {hi_deg:.2f} deg): "))
+            if lo_deg - 0.005 <= fn_deg <= hi_deg + 0.005: #allow for the rounding in the printed range
                 break
-            print(f"Error: {th6_deg:g} deg is outside the reachable range [{lo_deg:.2f}, {hi_deg:.2f}] deg. Try again.")
+            print(f"Error: {fn_deg:g} deg is outside the reachable range [{lo_deg:.2f}, {hi_deg:.2f}] deg. Try again.")
         except ValueError: #input wasn't a number
             print("Error: please enter a number.")
-    th6_user = np.clip(np.radians(th6_deg), lo, hi) #keep exactly within range after the rounding allowance
-    targets = {f"th6 = {th6_deg:g} deg (user input)": th6_user}
-
+    th6_user = np.clip(np.radians(to_th6(fn_deg)), lo, hi) #convert to th6 for the solver, kept exactly within range
+    targets = {f"th_FN = {fn_deg:g} deg (user input)": th6_user}
+ 
     for name, t6 in targets.items():
         sols = ik(t6) #solve ik
-        print(f"{name}:  th6 = {np.degrees(t6):.2f} deg  ->  {len(sols)} solution(s)") #print label, target, and num solutions
+        print(f"{name}:  ->  {len(sols)} solution(s)") #print label and num solutions
         for s in sols:
             qp, P = fk(s) #check FK of each solution
             err = np.degrees(abs(wrap(qp[3] - t6))) #FK output of this IK solution vs. the target
-            print(f"    th2 = {np.degrees(s):7.2f} deg   P = {P.round(3)}   |th6 error| = {err:.1e} deg") #print differences
+            print(f"    th_AB = {np.degrees(s):7.2f} deg   P = {P.round(3)}   |th_FN error| = {err:.1e} deg") #print differences
         print()
-
+ 
     #where 4 solutions exist: target values between the two small extremes inside the dwell
     grid6 = np.linspace(lo, hi, 2000)[1:-1] #target values across the range (endpoints dropped: 1 solution there)
     four = grid6[[len(ik(t, n_scan=1800)) == 4 for t in grid6]] #keep the targets that have 4 solutions
-    print(f"4 solutions for th6 in ~ [{np.degrees(four.min()):.2f}, {np.degrees(four.max()):.2f}] deg (inside the dwell); "
+    print(f"4 solutions for th_FN in ~ [{to_FN(np.degrees(four.min())):.2f}, {to_FN(np.degrees(four.max())):.2f}] deg (inside the dwell); "
           "2 everywhere else in the range\n")
-
-    #Plotting
+ 
+    #Plotting (all output angles shown as th_FN)
     fig, ax = plt.subplots(1, 2, figsize=(12, 4))
-    ax[0].plot(np.degrees(th2s), np.degrees(th6s), "k-", lw=1.5, label="θ6(θ2) from FK")
+    ax[0].plot(np.degrees(th2s), to_FN(np.degrees(th6s)), "k-", lw=1.5, label="θFN(θAB) from FK")
     t6 = th6_user #user target
     for s in ik(t6):
-        ax[0].plot(np.degrees(s), np.degrees(t6), "ro")
-    ax[0].axhline(np.degrees(t6), color="r", ls="--", lw=1, label=f"target θ6 = {th6_deg:g}°")
-    ax[0].set_xlabel("θ2 (deg)"); ax[0].set_ylabel("θ6 (deg)")
+        ax[0].plot(np.degrees(s), to_FN(np.degrees(t6)), "ro")
+    ax[0].axhline(to_FN(np.degrees(t6)), color="r", ls="--", lw=1, label=f"target θFN = {fn_deg:g}°")
+    ax[0].set_xlabel("θAB (deg)"); ax[0].set_ylabel("θFN (deg)")
     ax[0].set_title("IK = where the output curve meets the target"); ax[0].legend(); ax[0].grid()
-    #zoom on the dwell (th2 from -60 to 60 deg) with the 4-solution target
+    #zoom on the dwell (th_AB from -60 to 60 deg) with the 4-solution target
     zz = np.radians(np.arange(-60, 60.01, 0.1)) #dwell zoom range
-    ax[1].plot(np.degrees(zz), [np.degrees(fk(t)[0][3]) for t in zz], "k-", lw=1.5)
-    t6 = np.radians(-90.7) #fixed example inside the 4-solution band
+    ax[1].plot(np.degrees(zz), [to_FN(np.degrees(fk(t)[0][3])) for t in zz], "k-", lw=1.5)
+    t6 = np.radians(to_th6(89.3)) #fixed example inside the 4-solution band (th_FN = 89.3 deg)
     for s in ik(t6):
         if abs(wrap(s)) < np.radians(60): #the 4th solution (~184 deg) is off-panel
-            ax[1].plot(np.degrees(wrap(s)), np.degrees(t6), "ro")
-    ax[1].axhline(np.degrees(t6), color="r", ls="--", lw=1, label="target θ6 = -90.7°")
-    ax[1].set_xlabel("θ2 (deg, wrapped)")
-    ax[1].set_ylabel("θ6 (deg)")
-    ax[1].set_title("Dwell zoom: 3 of the 4 solutions (4th at θ2 ≈ 184°)")
+            ax[1].plot(np.degrees(wrap(s)), 89.3, "ro")
+    ax[1].axhline(89.3, color="r", ls="--", lw=1, label="target θFN = 89.3°")
+    ax[1].set_xlabel("θAB (deg, wrapped)")
+    ax[1].set_ylabel("θFN (deg)")
+    ax[1].set_title("Dwell zoom: 3 of the 4 solutions (4th at θAB ≈ 184°)")
     ax[1].legend()
     ax[1].grid()
     plt.tight_layout()

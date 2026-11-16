@@ -163,9 +163,16 @@ if __name__ == "__main__":
     wrap_deg = lambda a: (np.degrees(a) + 180) % 360 - 180 #report angles in [-180, 180)
     csv_path = os.path.join(HERE, "sixbar_joint_angles.csv") #where to save
     th2_deg_all = np.degrees(T2) #full 360 sweep
-    rows = np.column_stack([th2_deg_all, wrap_deg(T3), wrap_deg(T4), wrap_deg(T5), wrap_deg(T6), PS[:, 0], PS[:, 1], [in_dwell(t, dw_start, dw_end) for t in th2_deg_all]]) #setup csv
-    header = ("th2_deg (A->B),th3_deg (B->C),th4_deg (C->D),th5_deg (M->N),th6_deg (N->F), P_x,P_y,in_dwell (1 = output within +-0.5 deg of dwell value)")
-    np.savetxt(csv_path, rows, delimiter=",", header=header, comments="", fmt=["%.0f", "%.4f", "%.4f", "%.4f", "%.4f", "%.4f", "%.4f", "%d"]) #save csv
+    rows = np.column_stack([th2_deg_all, wrap_deg(T3), wrap_deg(T4), wrap_deg(T5), wrap_deg(T6),
+                            th2_deg_all, wrap_deg(T4 + np.pi), wrap_deg(T6 + np.pi), #ground joints A, D, F
+                            PS[:, 0], PS[:, 1], [in_dwell(t, dw_start, dw_end) for t in th2_deg_all]]) #setup csv
+    header = ("th2_deg (A->B),th3_deg (B->C),th4_deg (C->D),th5_deg (M->N),th6_deg (N->F),"
+              "joint_A_deg (ground->AB),joint_D_deg (ground->DC),joint_F_deg (ground->FN),"
+              "P_x,P_y,in_dwell (1 = output within +-0.5 deg of dwell value)")
+    np.savetxt(csv_path, rows, delimiter=",", header=header, comments="",
+               fmt=["%.0f", "%.4f", "%.4f", "%.4f", "%.4f",
+                    "%.0f", "%.4f", "%.4f",
+                    "%.4f", "%.4f", "%d"]) #save csv
     print(f"Saved joint angles for {len(T2)} crank angles to {csv_path}\n")
 
     os.makedirs(FRAME_DIR, exist_ok=True) #create the frames folder
