@@ -11,10 +11,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Mechanism Geometry
-A  = np.array([0.80, 4.74]) #A coordinates in D ({s})
-F  = np.array([-5.92, -3.04]) #F coordinates in D ({s})
+# Mechanism Geometry (dimensions defined in inches, converted to mm)
+IN_TO_MM = 25.4 #exact
+A  = np.array([0.80, 4.74]) * IN_TO_MM #A coordinates in D ({s}), mm
+F  = np.array([-5.92, -3.04]) * IN_TO_MM #F coordinates in D ({s}), mm
 D  = np.array([0.0, 0.0]) #we define as origin
-AB, BC, CD, CM, MN, NF, FP = 2.00, 3.70, 3.70, 3.70, 5.91, 2.57, 9.43 #link lengths
+AB, BC, CD, CM, MN, NF, FP = np.array([2.00, 3.70, 3.70, 3.70, 5.91, 2.57, 9.43]) * IN_TO_MM #link lengths, mm
 alpha = np.radians(80.0) #angle BCM inside rigid link
 DA, th1  = np.hypot(*A), np.arctan2(A[1], A[0]) #Define DA (ground) length and DA angle (theta1, constant)
 DF, th1p = np.hypot(*F), np.arctan2(F[1], F[0]) #Define DF (ground) length and DF angle (theta1', constant)
@@ -90,17 +92,22 @@ if __name__ == "__main__":
     QP = np.unwrap(np.array(QP), axis=0) #unwraps atan2
     PS = np.array(PS) #convert to np array
     print(f"\nBranch s1={S1}, s2={S2}: all 361 poses close, max |g| < 1e-9") #prints confirmed answer
-    print(f"th6 range: {np.degrees(QP[:,3].min()):.1f} to {np.degrees(QP[:,3].max()):.1f} deg") #reports output angle range
+    print(f"th_FN range: {np.degrees(QP[:,3].min()) + 180:.1f} to {np.degrees(QP[:,3].max()) + 180:.1f} deg") #reports output angle range
 
     #Plotting
     fig, ax = plt.subplots(1, 2, figsize=(11, 4))
     ax[0].plot(PS[:, 0], PS[:, 1])
     ax[0].set_aspect("equal")
-    ax[0].set_title("Output path of P Relative to Origin a D")
-    ax[0].set_xlabel("x")
-    ax[0].set_ylabel("y")
-    for i, name in enumerate(["θBC", "θCD", "θMN", "θNF"]):
-        ax[1].plot(np.degrees(th2s), np.degrees(QP[:, i]), label=name)
+    ax[0].set_title("Output path of P Relative to Origin at D")
+    ax[0].set_xlabel("x (mm)")
+    ax[0].set_ylabel("y (mm)")
+    #report convention: th_DC = th4 (C->D) + 180, th_FN = th6 (N->F) + 180
+    report_angles = {"θBC": np.degrees(QP[:, 0]),
+                     "θDC": np.degrees(QP[:, 1]) + 180,
+                     "θMN": np.degrees(QP[:, 2]),
+                     "θFN": np.degrees(QP[:, 3]) + 180}
+    for name, vals in report_angles.items():
+        ax[1].plot(np.degrees(th2s), vals, label=name)
     ax[1].set_xlabel("θAB (deg)")
     ax[1].set_ylabel("angle (deg)")
     ax[1].set_title("Passive joints vs input")
@@ -147,7 +154,7 @@ if __name__ == "__main__":
     ax2.plot(PS[:, 0], PS[:, 1], "-", color="tab:blue", lw=1, alpha=0.6, label="path of P") #draw path of P (already calculated)
 
     #joint range arcs
-    r_arc = 0.8 #radius of arc, arbitrary
+    r_arc = 0.8 * IN_TO_MM #radius of arc, arbitrary (mm)
     colors = plt.cm.tab10(np.arange(len(joint_defs))) #use a colormap
     for (name, (pos, ref, mov)), col in zip(joint_defs.items(), colors):
         rel = np.unwrap(mov - ref) #joint angle over the sweep
@@ -167,8 +174,8 @@ if __name__ == "__main__":
     ax2.set_aspect("equal")
     ax2.grid()
     ax2.legend(loc="upper left", bbox_to_anchor=(1.01, 1), fontsize=9) #legend outside, right of the plot
-    ax2.set_title(f"Mechanism at θ2 = {np.degrees(T2[i0]):.0f}°, arcs = joint range over full crank rotation")
-    ax2.set_xlabel("x") 
-    ax2.set_ylabel("y")
+    ax2.set_title(f"Mechanism at θAB = {np.degrees(T2[i0]):.0f}°, arcs = joint range over full crank rotation")
+    ax2.set_xlabel("x (mm)") 
+    ax2.set_ylabel("y (mm)")
     plt.tight_layout()
     fig2.savefig("fk_sixbar_ranges.png", dpi=120)

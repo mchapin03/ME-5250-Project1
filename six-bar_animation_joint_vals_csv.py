@@ -3,8 +3,9 @@ Animation of the one-dwell six-bar over one full crank rotation.
 Imports the FK solver, draws the mechanism + joint-range arcs at every crank angle,
 saves each frame as a PNG, then stacks the frames into a 30 fps MP4.
 
-Also writes a CSV of every joint angle (th2..th6, CCW from +x) for th2 = 0-360 deg, and
-reports the dwell: the crank range over which th6 stays within +-0.5 deg of its dwell value.
+Also writes a CSV of every link angle in the report convention (th_AB, th_BC, th_DC, th_MN, th_FN,
+CCW from +x) for th_AB = 0-360 deg, with P in mm, and reports the dwell: the crank range over which
+th_FN stays within +-0.5 deg of its dwell value.
 """
 import os
 import importlib.util
@@ -29,7 +30,7 @@ FPS = 30 #will give exactly 12s video from 360 frames
 FRAME_DIR = os.path.join(HERE, "frames") #folder to store frames
 VIDEO_PATH = os.path.join(HERE, "sixbar_rotation.mp4") #video path
 S1, S2 = +1, -1 #assembly mode: same as FK script
-R_ARC = 0.8 #radius of the joint-range arcs: same as FK script
+R_ARC = 0.8 * fkm.IN_TO_MM #radius of the joint-range arcs: same as FK script
 KEEP_FRAMES = False #set True to keep the individual frame PNGs after the video is made
 
 # ---------------- solve FK once for the whole rotation ----------------
@@ -71,7 +72,7 @@ COLORS = dict(zip(range_defs, plt.cm.tab10(np.arange(len(range_defs))))) #colorm
 
 #fix axis limits so it is the same for every frame
 allpts = np.vstack([A, D, F, PS] + [np.array(j) for j in JOINTS])
-pad = R_ARC + 0.5
+pad = R_ARC + 0.5 * fkm.IN_TO_MM
 XLIM = (allpts[:, 0].min() - pad, allpts[:, 0].max() + pad)
 YLIM = (allpts[:, 1].min() - pad, allpts[:, 1].max() + pad)
 
@@ -112,10 +113,9 @@ def draw_frame(ax, i):
     ax.set_ylim(YLIM)
     ax.set_aspect("equal")
     ax.grid()
-    ax.legend(loc="upper left", bbox_to_anchor=(1.01, 1), fontsize=9) #legend outside, right of the plot
-    ax.set_title(f"Mechanism at θ2 = {np.degrees(T2[i]):.0f}°, arcs = joint range over full crank rotation")
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
+    ax.set_title(f"Mechanism at θAB = {np.degrees(T2[i]):.0f}°, arcs = joint range over full crank rotation")
+    ax.set_xlabel("x (mm)")
+    ax.set_ylabel("y (mm)")
 
 #dwell: input range with output within +-0.5 deg of the dwell value
 DWELL_TOL = 0.5 # dwell tolerance in deg, from project definition
@@ -131,9 +131,11 @@ def find_dwell(step_deg=0.01):
     ext = [k for k in ext if th6f[k] not in (th6f.max(), th6f.min())]   # dwell extremes only (direction switches)
     if ext:
         value = (th6f[ext].max() + th6f[ext].min()) / 2 #find midpoint
+        wiggle = th6f[ext].max() - th6f[ext].min() #size of the output's wiggle inside the dwell
         k0 = ext[0]
     else: #no wiggle: use flattest point
         k0 = int(np.argmin(np.abs(nxt - prev))) #flattest point - smallest change between neighbours
+        wiggle = 0.0 #no wiggle
         value = th6f[k0]
     inside = np.abs(th6f - value) <= DWELL_TOL #true wherever the output is within tolerance
     lo_k, hi_k = k0, k0 #both ends of the dwell start at k0, then grow outwards
@@ -143,7 +145,23 @@ def find_dwell(step_deg=0.01):
     end = (hi_k * step_deg) % 360
     span = (hi_k - lo_k) * step_deg #find span of dwell range
     resid = th6f[np.arange(lo_k, hi_k + 1) % n]
-    return value, start, end, span, resid.max() - resid.min()
+    return value, start, end, span, resid.max() - resid.min(), wiggle, th6f
+
+def longest_run(mask):
+    """Length of the longest run of True values in mask, treating it as cyclic (360 -> 0)."""
+    if mask.all(): return len(mask)
+    m2 = np.roll(mask, -int(np.argmin(mask))) #start at a False so no run is split across the end
+    d = np.diff(np.r_[0, m2.astype(int), 0]) #+1 where a run starts, -1 where it ends
+    return int((np.where(d == -1)[0] - np.where(d == 1)[0]).max()) if m2.any() else 0
+
+def best_dwell(th6f, value, step_deg=0.01, dv=0.001):
+    """Try every dwell value within +-tol of `value` (in dv steps); return the one giving
+    the longest dwell, and that dwell angle in degrees."""
+    best_c, best_n = value, -1
+    for c in np.arange(value - DWELL_TOL, value + DWELL_TOL, dv):
+        n_in = longest_run(np.abs(th6f - c) <= DWELL_TOL) #grid points in the longest dwell
+        if n_in > best_n: best_c, best_n = c, n_in
+    return best_c, (best_n - 1) * step_deg #same span definition as find_dwell
 
 def in_dwell(th2_deg, start, end):
     """True if th2 lies in the dwell range [start, end] (which may wrap past 360)."""
@@ -153,26 +171,27 @@ def in_dwell(th2_deg, start, end):
 #Render frames, then build the video
 if __name__ == "__main__":
     #dwell range
-    dw_value, dw_start, dw_end, dw_span, dw_resid = find_dwell() #get dwell values
-    print(f"Dwell value: th6 = {dw_value:.3f} deg") #report dwell values
-    print(f"Output within +-{DWELL_TOL} deg of it for th2 from {dw_start:.2f} to {dw_end:.2f} deg "
-          f"(through 0 deg if start > end): dwell angle = {dw_span:.2f} deg of crank rotation")
-    print(f"Max residual output motion inside the dwell: {dw_resid:.3f} deg\n") #residual is 1 by construction (-0.5 to 0.5 degrees), prints 0.9999 due to 0.01 grid resolution
-
+    dw_value, dw_start, dw_end, dw_span, dw_resid, dw_wiggle, th6f = find_dwell() #get dwell values
+    best_value, best_span = best_dwell(th6f, dw_value) #dwell value that maximizes the dwell angle
+    print(f"Dwell value (midpoint of the wiggle): th_FN = {dw_value + 180:.2f} deg")
+    print(f"Wiggle inside the dwell: {dw_wiggle:.2f} deg")
+    print(f"Output within +-{DWELL_TOL} deg of it for th_AB from {dw_start:.2f} to {dw_end:.2f} deg "
+          f"(through 0 deg if start > end)")
+    print(f"Dwell angle: {dw_span:.2f} deg of crank rotation ({dw_span / 360:.0%} of the cycle)")
+    print(f"Max residual output motion inside the dwell: {dw_resid:.2f} deg")
+    print(f"Best possible dwell value: th_FN = {best_value + 180:.2f} deg, giving {best_span:.2f} deg\n")
     #CSV of all joints
     wrap_deg = lambda a: (np.degrees(a) + 180) % 360 - 180 #report angles in [-180, 180)
     csv_path = os.path.join(HERE, "sixbar_joint_angles.csv") #where to save
     th2_deg_all = np.degrees(T2) #full 360 sweep
-    rows = np.column_stack([th2_deg_all, wrap_deg(T3), wrap_deg(T4), wrap_deg(T5), wrap_deg(T6),
-                            th2_deg_all, wrap_deg(T4 + np.pi), wrap_deg(T6 + np.pi), #ground joints A, D, F
+    #report convention: th_DC = th4 (C->D) + 180, th_FN = th6 (N->F) + 180
+    #th_AB, th_DC and th_FN are also the ground-joint angles at A, D and F
+    rows = np.column_stack([th2_deg_all, wrap_deg(T3), wrap_deg(T4 + np.pi), wrap_deg(T5), wrap_deg(T6 + np.pi),
                             PS[:, 0], PS[:, 1], [in_dwell(t, dw_start, dw_end) for t in th2_deg_all]]) #setup csv
-    header = ("th2_deg (A->B),th3_deg (B->C),th4_deg (C->D),th5_deg (M->N),th6_deg (N->F),"
-              "joint_A_deg (ground->AB),joint_D_deg (ground->DC),joint_F_deg (ground->FN),"
-              "P_x,P_y,in_dwell (1 = output within +-0.5 deg of dwell value)")
+    header = ("th_AB_deg (A->B; joint A),th_BC_deg (B->C),th_DC_deg (D->C; joint D),th_MN_deg (M->N),"
+              "th_FN_deg (F->N; joint F),P_x_mm,P_y_mm,in_dwell (1 = output within +-0.5 deg of dwell value)")
     np.savetxt(csv_path, rows, delimiter=",", header=header, comments="",
-               fmt=["%.0f", "%.4f", "%.4f", "%.4f", "%.4f",
-                    "%.0f", "%.4f", "%.4f",
-                    "%.4f", "%.4f", "%d"]) #save csv
+               fmt=["%.0f", "%.4f", "%.4f", "%.4f", "%.4f", "%.4f", "%.4f", "%d"]) #save csv
     print(f"Saved joint angles for {len(T2)} crank angles to {csv_path}\n")
 
     os.makedirs(FRAME_DIR, exist_ok=True) #create the frames folder

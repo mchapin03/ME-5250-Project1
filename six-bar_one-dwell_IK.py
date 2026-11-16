@@ -7,17 +7,19 @@ Method: the mechanism is 1-DOF, so IK is a 1-D root-finding problem
     f(th2) = th6(th2) - th6_target = 0,
 where th6(th2) comes from the closed-form FK. Scan th2 over a full rotation to bracket
 every root (sign change), then refine each bracket with Brent's method.
-Same convention as the FK script (th6 : N->F, {s} at D).
+Internally uses th6 (N->F); inputs, prints and plots use the report convention th_FN = th6 + 180 deg.
+Lengths in mm, {s} at D.
 """
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import brentq
 
 #Geometry + FK
-A  = np.array([0.80, 4.74]) #joint A location
-F = np.array([-5.92, -3.04]) #joint F location
+IN_TO_MM = 25.4 #exact
+A  = np.array([0.80, 4.74]) * IN_TO_MM #joint A location, mm
+F = np.array([-5.92, -3.04]) * IN_TO_MM #joint F location, mm
 D = np.array([0.0, 0.0]) #joint D location
-AB, BC, CD, CM, MN, NF, FP = 2.00, 3.70, 3.70, 3.70, 5.91, 2.57, 9.43 #link lengths
+AB, BC, CD, CM, MN, NF, FP = np.array([2.00, 3.70, 3.70, 3.70, 5.91, 2.57, 9.43]) * IN_TO_MM #link lengths, mm
 alpha = np.radians(80.0) #angle BCM
 S1, S2 = +1, -1 #assembly mode used throughout
 
@@ -51,7 +53,7 @@ def fk(th2, s1=S1, s2=S2):
 def wrap(a): #wrap angle to [-pi, pi)
     return (a + np.pi) % (2*np.pi) - np.pi
 
-def output_to_th6(P, tol=1e-3):
+def output_to_th6(P, tol=1e-2):
     """Output point P -> output angle th6. P must lie on the circle of radius FP
     about F, because P is fixed to the rigid output link."""
     r = np.linalg.norm(P - F) #radius of output path
@@ -122,7 +124,7 @@ if __name__ == "__main__":
         for s in sols:
             qp, P = fk(s) #check FK of each solution
             err = np.degrees(abs(wrap(qp[3] - t6))) #FK output of this IK solution vs. the target
-            print(f"    th_AB = {np.degrees(s):7.2f} deg   P = {P.round(3)}   |th_FN error| = {err:.1e} deg") #print differences
+            print(f"    th_AB = {np.degrees(s):7.2f} deg   P = {P.round(3)} mm   |th_FN error| = {err:.1e} deg") #print differences
         print()
  
     #where 4 solutions exist: target values between the two small extremes inside the dwell
