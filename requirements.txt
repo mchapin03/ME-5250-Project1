@@ -1,5 +1,11 @@
 numpy
 matplotlib
 scipy
+pandas
 imageio>=2.9
 imageio-ffmpeg
+
+# only needed for live data capture with LivePlotter/plotter.py
+pyserial
+pyqtgraph
+PyQt6

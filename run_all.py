@@ -6,16 +6,17 @@ import os
 import subprocess
 import sys
 
-FK_INPUT = None #crank angle th2 in deg for the FK plot, leave NONE to be asked in terminal
-IK_INPUT = None #target output angle th6 in deg for the IK solve, leave NONE to be asked in terminal
+FK_INPUT = 0 #crank angle th2 in deg for the FK plot, leave NONE to be asked in terminal
+IK_INPUT = 89.3 #target output angle th6 in deg for the IK solve, leave NONE to be asked in terminal
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SCRIPTS = [ #name of script and terminal output, if any
+SCRIPTS = [
+    ("six-bar_mechanical_advantage.py", None), #Jacobian, singularities, mechanical advantage (runs first so FK can plot the singularities)
     ("six-bar_one-dwell_closed-form_FK.py", FK_INPUT), #FK, passive joints, joint-range plot
-    ("six-bar_one-dwell_IK.py",             IK_INPUT), #IK solutions and plots
+    ("six-bar_one-dwell_IK.py", IK_INPUT), #IK solutions and plots
     ("six-bar_animation_joint_vals_csv.py", None), #CSV, dwell range, video
+    ("LivePlotter/data_analysis.py", None), #Physical model error plots
 ]
-
 for name, answer in SCRIPTS:
     path = os.path.join(HERE, name)
     if not os.path.exists(path): #if failed to find

@@ -156,4 +156,4 @@ if __name__ == "__main__":
     ax[1].legend()
     ax[1].grid()
     plt.tight_layout()
-    plt.savefig("ik_sixbar.png", dpi=120)
+    plt.savefig("D4_ik_sixbar.png", dpi=120)

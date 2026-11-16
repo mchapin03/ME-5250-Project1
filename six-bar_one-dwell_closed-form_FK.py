@@ -7,6 +7,7 @@ Convention (Head-tail):
   C->M direction = th3 + pi + alpha  (BCM is one rigid link, pi reverses direction)
 {s} frame: origin at D, x right, y up, angles CCW from +x.
 """
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -97,7 +98,7 @@ if __name__ == "__main__":
     #Plotting
     fig, ax = plt.subplots(1, 2, figsize=(11, 4))
     ax[0].plot(PS[:, 0], PS[:, 1])
-    ax[0].set_aspect("equal")
+    ax[0].set_aspect("equal", adjustable="datalim") #keep true shape; expand the y-range instead of shrinking the box
     ax[0].set_title("Output path of P Relative to Origin at D")
     ax[0].set_xlabel("x (mm)")
     ax[0].set_ylabel("y (mm)")
@@ -108,14 +109,26 @@ if __name__ == "__main__":
                      "θFN": np.degrees(QP[:, 3]) + 180}
     for name, vals in report_angles.items():
         ax[1].plot(np.degrees(th2s), vals, label=name)
+    #mark the end-effector singularities (J = 0) found by the D6 script
+    sing_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "D6_singularities.csv")
+    if os.path.exists(sing_path): #plotting singularities
+        sing = np.atleast_2d(np.loadtxt(sing_path, delimiter=",", skiprows=1)) #rows: theta_AB_deg, theta_FN_deg
+        for k, t_deg in enumerate(sing[:, 0]):
+            qs, Ps = fk(np.radians(t_deg), S1, S2) #pose at the singularity
+            lab = "singularity (J = 0)" if k == 0 else None #label once, for the legend
+            ax[1].plot(t_deg, np.degrees(qs[3]) + 180, "kx", ms=8, mew=2, zorder=5, label=lab) #on the th_FN curve
+            ax[0].plot(*Ps, "kx", ms=8, mew=2, zorder=5, label=lab) #on the path of P
+        ax[0].legend()
+    else:
+        print("D6_singularities.csv not found: run the D6 script first to mark singularities on the D5 plot")
     ax[1].set_xlabel("θAB (deg)")
     ax[1].set_ylabel("angle (deg)")
     ax[1].set_title("Passive joints vs input")
-    ax[1].legend()
+    ax[1].legend(loc="upper left", bbox_to_anchor=(1.01, 1), fontsize=9) #legend outside, right of the plot
     plt.tight_layout()
     ax[0].grid()
     ax[1].grid()
-    plt.savefig("fk_sixbar.png", dpi=120)
+    plt.savefig("D5_fk_sixbar.png", dpi=120, bbox_inches="tight")
 
 
     #Diagram of joint ranges in +1, -1 assembly mode
@@ -162,7 +175,7 @@ if __name__ == "__main__":
         span = np.degrees(hi - lo) #span of joint angles
         base = ref[i0] #freeze reference link at the drawn pose for showing
         arc = np.linspace(lo, hi, 200) + base if span < 360 else np.linspace(0, 2*np.pi, 200) #create arc vector
-        txt = "360 deg (full rotation)" if span >= 360 else f"{span:.0f} degrees" #show text of spans 
+        txt = "360 deg" if span >= 360 else f"{span:.0f} degrees" #show text of spans 
         ax2.plot(pos[0] + r_arc*np.cos(arc), pos[1] + r_arc*np.sin(arc), color=col, lw=2.5, label=f"joint {name}: {txt}") #plot the joint's range arc
         ground = name in ("A", "D", "F") #define grounded joints
         ax2.plot(*pos, "s" if ground else "o", ms=9, mfc="w", mec="k", mew=2, zorder=5) #squares are grounded R joints, circles are moving R joints
@@ -178,4 +191,4 @@ if __name__ == "__main__":
     ax2.set_xlabel("x (mm)") 
     ax2.set_ylabel("y (mm)")
     plt.tight_layout()
-    fig2.savefig("fk_sixbar_ranges.png", dpi=120)
+    fig2.savefig("D5_fk_sixbar_ranges.png", dpi=120)
